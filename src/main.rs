@@ -1,5 +1,7 @@
 #![allow(unused_variables)]
 
+use std::time::Duration;
+
 use color_eyre::{
     eyre::{Result, WrapErr},
     install,
@@ -12,6 +14,7 @@ use ratatui::{
     text::Line,
     widgets::{Block, Gauge, List, ListState, Paragraph},
 };
+mod loading;
 
 #[derive(Default)]
 struct App {
@@ -20,6 +23,8 @@ struct App {
     exit: bool,
     character_index: usize,
     input: String,
+    search_mode: bool,
+    loading: loading::Loading,
 }
 
 fn main() -> Result<()> {
@@ -32,7 +37,9 @@ impl App {
     fn run(&mut self, terminal: &mut DefaultTerminal) -> Result<()> {
         while !self.exit {
             terminal.draw(|f| self.render(f))?;
-            self.handle_events()?;
+            if event::poll(Duration::from_millis(50))? {
+                self.handle_events()?;
+            }
         }
 
         Ok(())
@@ -42,11 +49,11 @@ impl App {
         let prompt = Line::from("SolTxn".to_string()).style(Style::default().fg(Color::Blue));
         frame.render_widget(Paragraph::new(prompt), frame.area());
         self.render_dialogue_txn_id(frame);
+        self.loading.draw(frame);
     }
 
     fn render_dialogue_txn_id(&mut self, frame: &mut Frame) -> Result<()> {
-        if self.id.is_empty() || self.input.is_empty() {
-            self.input_mode = true;
+        if self.input_mode {
             let area = self.pop_up(frame.area(), 50, 3);
             let input = Paragraph::new(self.input.as_str())
                 .style(Style::default().fg(Color::Yellow))
@@ -74,9 +81,15 @@ impl App {
     }
 
     fn enter_char(&mut self, new_char: char) {
-        let index = self.byte_index();
-        self.input.insert(index, new_char);
-        self.move_cursor_right();
+        if self.input_mode {
+            let index = self.byte_index();
+            self.input.insert(index, new_char);
+            self.move_cursor_right();
+        } else {
+            if new_char == 'e' {
+                self.input_mode = true
+            }
+        }
     }
 
     fn byte_index(&self) -> usize {
@@ -145,12 +158,26 @@ impl App {
     fn handle_key(&mut self, key: KeyEvent) {
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => self.exit = true,
-                        KeyCode::Char(to_insert) => self.enter_char(to_insert),
-                        KeyCode::Backspace => self.delete_char(),
-                        KeyCode::Left => self.move_cursor_left(),
-                        KeyCode::Right => self.move_cursor_right(),
-                        // KeyCode::Esc => self.input_mode = false,
+            KeyCode::Char(to_insert) => self.enter_char(to_insert),
+            KeyCode::Backspace => self.delete_char(),
+            KeyCode::Left => self.move_cursor_left(),
+            KeyCode::Right => self.move_cursor_right(),
+            KeyCode::Enter => self.handle_enter(),
+            // KeyCode::Char('e') => self.input_mode = true,
+            // KeyCode::Esc => self.input_mode = false,
             _ => {}
         }
     }
+
+    fn handle_enter(&mut self) {
+        if self.input_mode {
+            self.input_mode = false;
+            self.loading.state = true;
+            self.search_mode = true;
+            // self.submit_message();
+            // self.loading.start("Searching");
+        }
+    }
+
+    fn handle_loading(&mut self, frame: &mut Frame) {}
 }
