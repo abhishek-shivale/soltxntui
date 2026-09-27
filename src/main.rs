@@ -1,11 +1,10 @@
-#![allow(unused_variables)]
-
 use std::time::Duration;
 
 use color_eyre::{
     eyre::{Result, WrapErr},
     install,
 };
+use crossbeam::channel;
 use ratatui::{
     DefaultTerminal, Frame,
     crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
@@ -14,7 +13,11 @@ use ratatui::{
     text::Line,
     widgets::{Block, Gauge, List, ListState, Paragraph},
 };
+use std::thread;
+
 mod loading;
+mod rpc;
+mod viewer;
 
 #[derive(Default)]
 struct App {
@@ -25,6 +28,10 @@ struct App {
     input: String,
     search_mode: bool,
     loading: loading::Loading,
+    rpc: rpc::Rpc,
+    recv: Option<channel::Receiver<Result<Vec<rpc::SignatureInfo>>>>,
+    data: Option<Result<Vec<rpc::SignatureInfo>>>,
+    view: viewer::View,
 }
 
 fn main() -> Result<()> {
@@ -40,6 +47,17 @@ impl App {
             if event::poll(Duration::from_millis(50))? {
                 self.handle_events()?;
             }
+
+            if let Some(rx) = &self.recv {
+                if let Ok(msg) = rx.try_recv() {
+                    self.data = Some(msg);
+                    self.loading.stop();
+                    if let Some(Ok(data)) = &self.data {
+                            self.view.new(data.clone());
+                            self.view.show  = true;
+                    }
+                }
+            }
         }
 
         Ok(())
@@ -50,6 +68,10 @@ impl App {
         frame.render_widget(Paragraph::new(prompt), frame.area());
         self.render_dialogue_txn_id(frame);
         self.loading.draw(frame);
+        self.view.render_data(frame);
+        if let Some(Err(err)) = &self.data {
+            frame.render_widget(Paragraph::new(format!("{err:?}")), frame.area());
+        }
     }
 
     fn render_dialogue_txn_id(&mut self, frame: &mut Frame) -> Result<()> {
@@ -174,10 +196,17 @@ impl App {
             self.input_mode = false;
             self.loading.state = true;
             self.search_mode = true;
-            // self.submit_message();
-            // self.loading.start("Searching");
+            self.submit_message();
+            if let Some(name) = self.id.last() {
+                self.rpc.add(name.clone());
+                let (sender, receiver) = channel::bounded::<Result<Vec<rpc::SignatureInfo>>>(5);
+                let fd = self.rpc.clone();
+                self.recv = Some(receiver);
+                thread::spawn(move || {
+                    thread::sleep(Duration::from_secs(5));
+                    sender.send(fd.fetch_data());
+                });
+            }
         }
     }
-
-    fn handle_loading(&mut self, frame: &mut Frame) {}
 }

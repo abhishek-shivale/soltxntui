@@ -73,11 +73,12 @@ impl Loading {
         r"                   ",
     ];
 
-    const FRAMES: [&[&str]; 4] = [
+    const FRAMES: [&[&str]; 5] = [
         Loading::IDEL,
         Loading::BLINK,
         Loading::ZAP_A,
         Loading::ZAP_B,
+        Loading::HAPPY,
     ];
     const SEQUENCE: [usize; 12] = [0, 0, 0, 1, 0, 0, 0, 2, 3, 2, 3, 0];
 
