@@ -201,7 +201,7 @@ impl App {
     fn handle_enter(&mut self) {
         if self.input_mode {
             self.input_mode = false;
-            self.loading.state = true;
+            self.loading.start("Loading");
             self.search_mode = true;
             self.submit_message();
             if let Some(name) = self.id.last() {

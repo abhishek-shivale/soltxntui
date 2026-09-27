@@ -93,6 +93,7 @@ impl Loading {
         if self.last_tick.elapsed() >= Self::TICK {
             self.tick = self.tick.wrapping_add(1);
             self.last_tick = Instant::now();
+            self.ratio += (0.95 - self.ratio) * 0.08;
         }
 
         let art = Self::FRAMES[Self::SEQUENCE[self.tick % Self::SEQUENCE.len()]];
