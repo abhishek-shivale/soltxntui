@@ -57,7 +57,7 @@ impl App {
                     self.data = Some(msg);
                     self.loading.stop();
                     if let Some(Ok(data)) = &self.data {
-                        self.view.new(data.clone());
+                        self.view.set_data(data.clone());
                         self.view.show = true;
                     }
                 }

@@ -28,7 +28,7 @@ pub struct TxPage {
     pub pagination_token: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct SignatureInfo {
     pub signature: String,
