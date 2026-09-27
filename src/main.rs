@@ -190,6 +190,8 @@ impl App {
             KeyCode::Backspace => self.delete_char(),
             KeyCode::Left => self.move_cursor_left(),
             KeyCode::Right => self.move_cursor_right(),
+            KeyCode::Down => self.view.next_row(),
+            KeyCode::Up => self.view.previous_row(),
             KeyCode::Enter => self.handle_enter(),
             // KeyCode::Esc => self.input_mode = false,
             _ => {}
