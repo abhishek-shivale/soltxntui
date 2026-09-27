@@ -7,7 +7,9 @@ use color_eyre::{
 use crossbeam::channel;
 use ratatui::{
     DefaultTerminal, Frame,
-    crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
+    crossterm::event::{
+        self, DisableBracketedPaste, EnableBracketedPaste, Event, KeyCode, KeyEvent, KeyEventKind,
+    },
     layout::{Constraint, Flex, Layout, Position, Rect},
     style::{Color, Style, Stylize},
     text::Line,
@@ -36,7 +38,9 @@ struct App {
 
 fn main() -> Result<()> {
     install()?; // color eyre added here 
+    crossterm::execute!(std::io::stdout(), EnableBracketedPaste)?;
     ratatui::run(|terminal| App::default().run(terminal))?;
+    crossterm::execute!(std::io::stdout(), DisableBracketedPaste)?;
     Ok(())
 }
 
@@ -53,8 +57,8 @@ impl App {
                     self.data = Some(msg);
                     self.loading.stop();
                     if let Some(Ok(data)) = &self.data {
-                            self.view.new(data.clone());
-                            self.view.show  = true;
+                        self.view.new(data.clone());
+                        self.view.show = true;
                     }
                 }
             }
@@ -129,20 +133,11 @@ impl App {
     fn delete_char(&mut self) {
         let is_not_cursor_leftmost = self.character_index != 0;
         if is_not_cursor_leftmost {
-            // Method "remove" is not used on the saved text for deleting the selected char.
-            // Reason: Using remove on String works on bytes instead of the chars.
-            // Using remove would require special care because of char boundaries.
-
             let current_index = self.character_index;
             let from_left_to_current_index = current_index - 1;
 
-            // Getting all characters before the selected character.
             let before_char_to_delete = self.input.chars().take(from_left_to_current_index);
-            // Getting all characters after selected character.
             let after_char_to_delete = self.input.chars().skip(current_index);
-
-            // Put all characters together except the selected one.
-            // By leaving the selected one out, it is forgotten and therefore deleted.
             self.input = before_char_to_delete.chain(after_char_to_delete).collect();
             self.move_cursor_left();
         }
@@ -169,11 +164,22 @@ impl App {
     }
 
     fn handle_events(&mut self) -> Result<()> {
-        if let Event::Key(k) = event::read()? {
-            if k.kind == KeyEventKind::Press {
-                self.handle_key(k);
+        match event::read()? {
+            Event::Key(k) => {
+                if k.kind == KeyEventKind::Press {
+                    self.handle_key(k);
+                }
             }
+            Event::Paste(p) => {
+                if self.input_mode {
+                    for c in p.trim().chars() {
+                        self.enter_char(c);
+                    }
+                }
+            }
+            _ => {}
         }
+
         Ok(())
     }
 
@@ -185,7 +191,6 @@ impl App {
             KeyCode::Left => self.move_cursor_left(),
             KeyCode::Right => self.move_cursor_right(),
             KeyCode::Enter => self.handle_enter(),
-            // KeyCode::Char('e') => self.input_mode = true,
             // KeyCode::Esc => self.input_mode = false,
             _ => {}
         }
