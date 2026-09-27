@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use color_eyre::{
-    eyre::{Result, WrapErr},
+    eyre::Result,
     install,
 };
 use crossbeam::channel;
@@ -13,7 +13,7 @@ use ratatui::{
     layout::{Constraint, Flex, Layout, Position, Rect},
     style::{Color, Style, Stylize},
     text::Line,
-    widgets::{Block, Gauge, List, ListState, Paragraph},
+    widgets::{Block, Paragraph},
 };
 use std::thread;
 
@@ -31,8 +31,8 @@ struct App {
     search_mode: bool,
     loading: loading::Loading,
     rpc: rpc::Rpc,
-    recv: Option<channel::Receiver<Result<Vec<rpc::SignatureInfo>>>>,
-    data: Option<Result<Vec<rpc::SignatureInfo>>>,
+    recv: Option<channel::Receiver<Result<rpc::TransactionDetail>>>,
+    data: Option<Result<rpc::TransactionDetail>>,
     view: viewer::View,
 }
 
@@ -68,8 +68,7 @@ impl App {
     }
 
     fn render(&mut self, frame: &mut Frame) {
-        let prompt = Line::from("SolTxn".to_string()).style(Style::default().fg(Color::Blue));
-        frame.render_widget(Paragraph::new(prompt), frame.area());
+        self.render_header(frame);
         self.render_dialogue_txn_id(frame);
         self.loading.draw(frame);
         self.view.render_data(frame);
@@ -78,12 +77,44 @@ impl App {
         }
     }
 
+    fn render_header(&self, frame: &mut Frame) {
+        let [header, body] =
+            Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(frame.area());
+
+        let brand = Line::from_iter([
+            " ◎ ".magenta().bold(),
+            "SolTxn".cyan().bold(),
+            "  Solana transaction explorer".dark_gray(),
+        ]);
+        let hints = Line::from_iter([
+            "e".yellow().bold(),
+            " search  ".dark_gray(),
+            "q".yellow().bold(),
+            " quit ".dark_gray(),
+        ]);
+        frame.render_widget(brand, header);
+        frame.render_widget(hints.right_aligned(), header);
+
+        let idle = !self.input_mode && !self.loading.state && !self.view.show && self.data.is_none();
+        if idle {
+            let [center] = Layout::vertical([Constraint::Length(1)])
+                .flex(Flex::Center)
+                .areas(body);
+            let welcome = Line::from_iter([
+                "Press ".dark_gray(),
+                "e".yellow().bold(),
+                " and paste a transaction signature".dark_gray(),
+            ]);
+            frame.render_widget(welcome.centered(), center);
+        }
+    }
+
     fn render_dialogue_txn_id(&mut self, frame: &mut Frame) -> Result<()> {
         if self.input_mode {
             let area = self.pop_up(frame.area(), 50, 3);
             let input = Paragraph::new(self.input.as_str())
                 .style(Style::default().fg(Color::Yellow))
-                .block(Block::bordered().title("Enter token, validator, programs and accounts"));
+                .block(Block::bordered().title(" Enter transaction signature "));
 
             frame.render_widget(input, area);
 
@@ -113,7 +144,8 @@ impl App {
             self.move_cursor_right();
         } else {
             if new_char == 'e' {
-                self.input_mode = true
+                self.input_mode = true;
+                self.view.show = false;
             }
         }
     }
@@ -206,7 +238,7 @@ impl App {
             self.submit_message();
             if let Some(name) = self.id.last() {
                 self.rpc.add(name.clone());
-                let (sender, receiver) = channel::bounded::<Result<Vec<rpc::SignatureInfo>>>(5);
+                let (sender, receiver) = channel::bounded::<Result<rpc::TransactionDetail>>(5);
                 let fd = self.rpc.clone();
                 self.recv = Some(receiver);
                 thread::spawn(move || {
